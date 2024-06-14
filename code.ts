@@ -44,13 +44,13 @@ figma.on("run", async () => {
 
       // The variable is an expression
       if (description.includes("{{")) {
-        const regex = /\{\{\s*(\$\w+)\s*\*\s*\d+\s*\}\}/g;
+        const regex = /\$([a-zA-Z0-9_/-]+)/g;
 
         let match;
         const matches = [];
 
         while ((match = regex.exec(description)) !== null) {
-          matches.push(match[1]);
+          matches.push("$" + match[1]);
         }
 
         let temporaryValue = variable.description
@@ -77,6 +77,7 @@ figma.on("run", async () => {
           }
         });
 
+        console.log(temporaryValue);
         const calculatedValue = calculateExpression(temporaryValue);
 
         UpdateVariable(firstMode, calculatedValue, variable);

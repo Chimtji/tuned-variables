@@ -47,11 +47,11 @@ figma.on("run", () => __awaiter(void 0, void 0, void 0, function* () {
             const firstMode = Object.keys(variable.valuesByMode)[0];
             // The variable is an expression
             if (description.includes("{{")) {
-                const regex = /\{\{\s*(\$\w+)\s*\*\s*\d+\s*\}\}/g;
+                const regex = /\$([a-zA-Z0-9_/-]+)/g;
                 let match;
                 const matches = [];
                 while ((match = regex.exec(description)) !== null) {
-                    matches.push(match[1]);
+                    matches.push("$" + match[1]);
                 }
                 let temporaryValue = variable.description
                     .replace("{{", "")
@@ -67,6 +67,7 @@ figma.on("run", () => __awaiter(void 0, void 0, void 0, function* () {
                         console.error("You can only reference other number variables. The others won't work with expressions");
                     }
                 });
+                console.log(temporaryValue);
                 const calculatedValue = calculateExpression(temporaryValue);
                 UpdateVariable(firstMode, calculatedValue, variable);
             }
