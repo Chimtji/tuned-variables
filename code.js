@@ -40,37 +40,43 @@ const UpdateVariable = (mode, value, variable) => {
     }
     variable.setValueForMode(mode, value);
 };
+const FindReferencesInDescription = (description) => {
+    let match;
+    const regex = /\$([a-zA-Z0-9_/-]+)/g;
+    const matches = [];
+    while ((match = regex.exec(description)) !== null) {
+        matches.push("$" + match[1]);
+    }
+    return matches;
+};
+const ConvertDescriptionToExpression = (description, references, variables, variable, firstMode) => {
+    let result = description.replace("{{", "").replace("}}", "");
+    references.forEach((match) => {
+        const referencedVariable = variables.find((seeker) => seeker.name === match.replace("$", "") &&
+            seeker.variableCollectionId === variable.variableCollectionId);
+        if ((referencedVariable === null || referencedVariable === void 0 ? void 0 : referencedVariable.resolvedType) === "FLOAT") {
+            const referencedValue = referencedVariable === null || referencedVariable === void 0 ? void 0 : referencedVariable.valuesByMode[firstMode];
+            result = result.replace(match, referencedValue);
+        }
+        else {
+            console.error("You can only reference other number variables. The others won't work with expressions");
+        }
+    });
+    return result;
+};
 figma.on("run", () => __awaiter(void 0, void 0, void 0, function* () {
     GetAllVariables().then((variables) => {
         variables.forEach((variable) => {
             const { description } = variable;
             const firstMode = Object.keys(variable.valuesByMode)[0];
-            // The variable is an expression
-            if (description.includes("{{")) {
-                const regex = /\$([a-zA-Z0-9_/-]+)/g;
-                let match;
-                const matches = [];
-                while ((match = regex.exec(description)) !== null) {
-                    matches.push("$" + match[1]);
-                }
-                let temporaryValue = variable.description
-                    .replace("{{", "")
-                    .replace("}}", "");
-                matches.forEach((match) => {
-                    const referencedVariable = variables.find((seeker) => seeker.name === match.replace("$", "") &&
-                        seeker.variableCollectionId === variable.variableCollectionId);
-                    if ((referencedVariable === null || referencedVariable === void 0 ? void 0 : referencedVariable.resolvedType) === "FLOAT") {
-                        const referencedValue = referencedVariable === null || referencedVariable === void 0 ? void 0 : referencedVariable.valuesByMode[firstMode];
-                        temporaryValue = temporaryValue.replace(match, referencedValue);
-                    }
-                    else {
-                        console.error("You can only reference other number variables. The others won't work with expressions");
-                    }
-                });
-                console.log(temporaryValue);
-                const calculatedValue = calculateExpression(temporaryValue);
-                UpdateVariable(firstMode, calculatedValue, variable);
+            if (!description.includes("{{")) {
+                // Variable is not dynamic, so we won't do magic
+                return;
             }
+            const references = FindReferencesInDescription(description);
+            const expression = ConvertDescriptionToExpression(description, references, variables, variable, firstMode);
+            const calculatedValue = calculateExpression(expression);
+            UpdateVariable(firstMode, calculatedValue, variable);
         });
         // --- IMPORTANT ---
         // We need to close the plugin when done with our work
