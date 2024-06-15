@@ -52,7 +52,7 @@ const ConvertDescriptionToExpression = (
   references: string[],
   variables: Variable[],
   variable: Variable,
-  firstMode: string
+  mode: string
 ): string => {
   let result = description.replace("{{", "").replace("}}", "");
 
@@ -64,9 +64,7 @@ const ConvertDescriptionToExpression = (
     );
 
     if (referencedVariable?.resolvedType === "FLOAT") {
-      const referencedValue = referencedVariable?.valuesByMode[
-        firstMode
-      ] as string;
+      const referencedValue = referencedVariable?.valuesByMode[mode] as string;
 
       result = result.replace(match, referencedValue);
     } else {
@@ -80,32 +78,39 @@ const ConvertDescriptionToExpression = (
 };
 
 figma.on("run", async () => {
-  GetAllVariables().then((variables) => {
-    variables.forEach((variable) => {
-      const { description } = variable;
-      const firstMode = Object.keys(variable.valuesByMode)[0];
+  try {
+    GetAllVariables().then((variables) => {
+      variables.forEach((variable) => {
+        const { description } = variable;
 
-      if (!description.includes("{{")) {
-        // Variable is not dynamic, so we won't do magic
-        return;
-      }
+        if (!description.includes("{{")) {
+          // Variable is not dynamic, so we won't do magic
+          return;
+        }
 
-      const references = FindReferencesInDescription(description);
-      const expression = ConvertDescriptionToExpression(
-        description,
-        references,
-        variables,
-        variable,
-        firstMode
-      );
+        const references = FindReferencesInDescription(description);
 
-      const calculatedValue = calculateExpression(expression);
-      UpdateVariable(firstMode, calculatedValue, variable);
+        Object.keys(variable.valuesByMode).forEach((mode) => {
+          const expression = ConvertDescriptionToExpression(
+            description,
+            references,
+            variables,
+            variable,
+            mode
+          );
+
+          const calculatedValue = calculateExpression(expression);
+          UpdateVariable(mode, calculatedValue, variable);
+        });
+      });
+
+      // --- IMPORTANT ---
+      // We need to close the plugin when done with our work
+      // or else it will keep on spinning
+      figma.closePlugin();
     });
-
-    // --- IMPORTANT ---
-    // We need to close the plugin when done with our work
-    // or else it will keep on spinning
+  } catch {
+    console.error("An Unexpected Error Happened");
     figma.closePlugin();
-  });
+  }
 });

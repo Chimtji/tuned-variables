@@ -49,13 +49,13 @@ const FindReferencesInDescription = (description) => {
     }
     return matches;
 };
-const ConvertDescriptionToExpression = (description, references, variables, variable, firstMode) => {
+const ConvertDescriptionToExpression = (description, references, variables, variable, mode) => {
     let result = description.replace("{{", "").replace("}}", "");
     references.forEach((match) => {
         const referencedVariable = variables.find((seeker) => seeker.name === match.replace("$", "") &&
             seeker.variableCollectionId === variable.variableCollectionId);
         if ((referencedVariable === null || referencedVariable === void 0 ? void 0 : referencedVariable.resolvedType) === "FLOAT") {
-            const referencedValue = referencedVariable === null || referencedVariable === void 0 ? void 0 : referencedVariable.valuesByMode[firstMode];
+            const referencedValue = referencedVariable === null || referencedVariable === void 0 ? void 0 : referencedVariable.valuesByMode[mode];
             result = result.replace(match, referencedValue);
         }
         else {
@@ -65,22 +65,29 @@ const ConvertDescriptionToExpression = (description, references, variables, vari
     return result;
 };
 figma.on("run", () => __awaiter(void 0, void 0, void 0, function* () {
-    GetAllVariables().then((variables) => {
-        variables.forEach((variable) => {
-            const { description } = variable;
-            const firstMode = Object.keys(variable.valuesByMode)[0];
-            if (!description.includes("{{")) {
-                // Variable is not dynamic, so we won't do magic
-                return;
-            }
-            const references = FindReferencesInDescription(description);
-            const expression = ConvertDescriptionToExpression(description, references, variables, variable, firstMode);
-            const calculatedValue = calculateExpression(expression);
-            UpdateVariable(firstMode, calculatedValue, variable);
+    try {
+        GetAllVariables().then((variables) => {
+            variables.forEach((variable) => {
+                const { description } = variable;
+                if (!description.includes("{{")) {
+                    // Variable is not dynamic, so we won't do magic
+                    return;
+                }
+                const references = FindReferencesInDescription(description);
+                Object.keys(variable.valuesByMode).forEach((mode) => {
+                    const expression = ConvertDescriptionToExpression(description, references, variables, variable, mode);
+                    const calculatedValue = calculateExpression(expression);
+                    UpdateVariable(mode, calculatedValue, variable);
+                });
+            });
+            // --- IMPORTANT ---
+            // We need to close the plugin when done with our work
+            // or else it will keep on spinning
+            figma.closePlugin();
         });
-        // --- IMPORTANT ---
-        // We need to close the plugin when done with our work
-        // or else it will keep on spinning
+    }
+    catch (_a) {
+        console.error("An Unexpected Error Happened");
         figma.closePlugin();
-    });
+    }
 }));
