@@ -1,24 +1,38 @@
-const calculateExpression = (expression: string): number => {
-  // Validate the expression to ensure it only contains digits, operators, and spaces
-  if (!/^[0-9+\-*/\s]+$/.test(expression)) {
-    throw new Error("Invalid characters in the mathematical expression");
-  }
-
-  // Remove any spaces from the expression
-  expression = expression.replace(/\s+/g, "");
-
-  // Evaluate the expression using the Function constructor
-  // This approach is safer because the input is validated
+const calculateExpression = (expression: string): number | undefined => {
   try {
-    const result = new Function(`return ${expression}`)();
-    if (typeof result !== "number" || isNaN(result)) {
+    if (!/^[0-9+\-*/\s.,]+$/.test(expression)) {
+      console.error(
+        "You are using invalid characters in your expressions. We only support: '+', '-', '*', '/', '.', ','"
+      );
+      throw new Error(
+        "You are using invalid characters in your expressions. We only support: '+', '-', '*', '/', '.', ','"
+      );
+    }
+
+    // Remove any spaces from the expression
+    expression = expression.replace(/\s+/g, "");
+
+    // Evaluate the expression using the Function constructor
+    // This approach is safer because the input is validated
+    try {
+      const result = new Function(`return ${expression}`)();
+      if (typeof result !== "number" || isNaN(result)) {
+        console.error("The expression is invalid:", expression);
+        throw new Error("Invalid mathematical expression");
+      }
+      return result;
+    } catch (error) {
+      console.error("Error evaluating expression:", expression);
       throw new Error("Invalid mathematical expression");
     }
-    return result;
-  } catch (error) {
-    console.error("Error evaluating expression:", error);
-    throw new Error("Invalid mathematical expression");
+  } catch {
+    console.error(
+      "An error happened trying to calculate the expression:",
+      expression
+    );
+    figma.closePlugin();
   }
+  // Validate the expression to ensure it only contains digits, operators, and spaces
 };
 
 const GetAllVariables = async (): Promise<Variable[]> => {
@@ -100,13 +114,12 @@ figma.on("run", async () => {
           );
 
           const calculatedValue = calculateExpression(expression);
-          UpdateVariable(mode, calculatedValue, variable);
+          if (calculatedValue) {
+            UpdateVariable(mode, calculatedValue, variable);
+          }
         });
       });
 
-      // --- IMPORTANT ---
-      // We need to close the plugin when done with our work
-      // or else it will keep on spinning
       figma.closePlugin();
     });
   } catch {
