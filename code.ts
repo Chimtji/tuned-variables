@@ -36,29 +36,83 @@ const calculateExpression = (expression: string): number | undefined => {
 };
 
 const GetAllVariables = async (): Promise<Variable[]> => {
-  const localVariables = await figma.variables.getLocalVariablesAsync("FLOAT");
-  return localVariables;
+  const result = await figma.variables.getLocalVariablesAsync("FLOAT");
+  return result;
+};
+const GetAllCollections = async (): Promise<VariableCollection[]> => {
+  const result = await figma.variables.getLocalVariableCollectionsAsync();
+  return result;
 };
 
-const UpdateVariable = (mode: string, value: number, variable: Variable) => {
+const UpdateVariable = (
+  modeIndex: number,
+  value: number,
+  variable: Variable
+) => {
   if (typeof value !== "number") {
     console.error("Couldn't convert the description expression to a number");
     return;
   }
 
-  variable.setValueForMode(mode, value);
+  const modeId = Object.keys(variable.valuesByMode)[modeIndex];
+
+  variable.setValueForMode(modeId, value);
 };
 
-const FindReferencesInDescription = (description: string): string[] => {
+const FindAllReferences = (text: string): string[] => {
   let match;
-  const regex = /\$([a-zA-Z0-9_/-]+)/g;
-  const matches = [];
+  // Updated regex to allow spaces in the reference
+  const regex = /\$([a-zA-Z0-9_/\- ]+)/g;
+  const matches: string[] = [];
 
-  while ((match = regex.exec(description)) !== null) {
-    matches.push("$" + match[1]);
+  while ((match = regex.exec(text)) !== null) {
+    matches.push("$" + match[1].trim());
   }
 
   return matches;
+};
+
+const GetVariableValue = (
+  id: string,
+  variables: Variable[],
+  modeIndex: number
+): string => {
+  const match = variables.find((variable) => variable.id === id);
+
+  if (!match) {
+    console.error("Couldn't find referenced variable value");
+    return "";
+  }
+
+  const modeId = Object.keys(match?.valuesByMode)[modeIndex];
+
+  if (typeof match?.valuesByMode[modeId] !== "object") {
+    return match?.valuesByMode[modeId] as string;
+  }
+
+  return GetVariableValue(
+    (match.valuesByMode[modeId] as VariableAlias).id,
+    variables,
+    modeIndex
+  );
+};
+
+const isReferenceFromAnotherCollection = (
+  name: string,
+  collections: VariableCollection[]
+): { result: boolean; collection?: VariableCollection } => {
+  if (name.includes("/")) {
+    const match = collections.find(
+      (collection) => collection.name === name.split("/")[0]
+    );
+    if (match) {
+      return { result: true, collection: match };
+    } else {
+      return { result: false };
+    }
+  } else {
+    return { result: false };
+  }
 };
 
 const ConvertDescriptionToExpression = (
@@ -66,21 +120,47 @@ const ConvertDescriptionToExpression = (
   references: string[],
   variables: Variable[],
   variable: Variable,
-  mode: string
+  modeIndex: number,
+  collections: VariableCollection[]
 ): string => {
   let result = description.replace("{{", "").replace("}}", "");
 
-  references.forEach((match) => {
+  references.forEach((reference) => {
+    let collection = variable.variableCollectionId;
+    let match = reference.replace("$", "");
+
+    const fromAnotherCollection = isReferenceFromAnotherCollection(
+      match,
+      collections
+    );
+
+    if (fromAnotherCollection.result) {
+      collection = fromAnotherCollection.collection?.id as string;
+      match = reference.replace(
+        `$${fromAnotherCollection.collection?.name}/`,
+        ""
+      );
+    }
+
     const referencedVariable = variables.find(
-      (seeker) =>
-        seeker.name === match.replace("$", "") &&
-        seeker.variableCollectionId === variable.variableCollectionId
+      (test) => test.name === match && test.variableCollectionId === collection
     );
 
     if (referencedVariable?.resolvedType === "FLOAT") {
-      const referencedValue = referencedVariable?.valuesByMode[mode] as string;
+      let referencedValue = GetVariableValue(
+        referencedVariable.id,
+        variables,
+        modeIndex
+      );
 
-      result = result.replace(match, referencedValue);
+      if (fromAnotherCollection.result) {
+        result = result.replace(
+          `$${fromAnotherCollection.collection?.name}/` + match,
+          referencedValue
+        );
+      } else {
+        result = result.replace("$" + match, referencedValue);
+      }
     } else {
       console.error(
         "You can only reference other number variables. The others won't work with expressions"
@@ -93,37 +173,42 @@ const ConvertDescriptionToExpression = (
 
 figma.on("run", async () => {
   try {
-    GetAllVariables().then((variables) => {
-      variables.forEach((variable) => {
-        const { description } = variable;
+    const variables = await GetAllVariables();
+    const collections = await GetAllCollections();
 
-        if (!description.includes("{{")) {
-          // Variable is not dynamic, so we won't do magic
-          return;
+    variables.forEach((variable) => {
+      const { description } = variable;
+
+      // Variable is not dynamic, so we won't do magic
+      if (!description.includes("{{")) {
+        return;
+      }
+
+      const references = FindAllReferences(description);
+
+      Object.keys(variable.valuesByMode).forEach((id, index) => {
+        const expression = ConvertDescriptionToExpression(
+          description,
+          references,
+          variables,
+          variable,
+          index,
+          collections
+        );
+
+        const calculatedValue = calculateExpression(expression);
+        if (calculatedValue) {
+          UpdateVariable(index, calculatedValue, variable);
         }
-
-        const references = FindReferencesInDescription(description);
-
-        Object.keys(variable.valuesByMode).forEach((mode) => {
-          const expression = ConvertDescriptionToExpression(
-            description,
-            references,
-            variables,
-            variable,
-            mode
-          );
-
-          const calculatedValue = calculateExpression(expression);
-          if (calculatedValue) {
-            UpdateVariable(mode, calculatedValue, variable);
-          }
-        });
       });
-
-      figma.closePlugin();
     });
-  } catch {
-    console.error("An Unexpected Error Happened");
+
+    figma.closePlugin();
+  } catch (error) {
+    console.error(
+      "An Unexpected Error Happened. This is most likely a problem in the plugin",
+      error
+    );
     figma.closePlugin();
   }
 });
