@@ -9,6 +9,7 @@ A <a href="https://www.figma.com">Figma</a> plugin for creating simple mathmatic
 - Create values based on simple mathmatical expressions
 - Use other variables as values for an expression
 - Reference variables from other groups
+- Reference variables from other collections
 
 ### 🚀 How to use:
 
@@ -16,13 +17,13 @@ A <a href="https://www.figma.com">Figma</a> plugin for creating simple mathmatic
 2. In the menu bar, click on the plugin, and it will run through all your variables and update their values if an expression is set.
 3. To use other variables as values reference them like so: `{{ $base * 2 }}`. This will take the value from the value with the name `base`
 4. To use nested variables simply use their name: `{{ $Font/Size/base * 2}}`. This will take the value `base` from the group `Size` inside the group `Font`
+5. To use variables from other collections prepend the variable name with the collection name. Example: If you have a collection called `primitives` then write it like so `$primitives/Font/Size/base` - this will get the variable `Font/Size/base` inside the `primitives` collection
 
 ### 🚧 Limitations:
 
 - Only Number variables at the moment
 - Modes are isolated, so you can't use a variable value from another mode.
 - Only simple operators are supported: `*`, `/`, `+`, `-`
-- Only variables from the same collection can be referenced
 
 ### 🎁 Contribute:
 
